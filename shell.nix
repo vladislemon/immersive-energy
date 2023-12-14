@@ -1,28 +1,60 @@
-# 1.7.10 needs these dependencies to run
+{ pkgs ? import <nixpkgs> { }, lib ? pkgs.lib }:
 let
-  nixpkgs = import <nixpkgs> {};
-in
-  with nixpkgs;
-  stdenv.mkDerivation {
-    name = "minecraft-1.7.10-dev";
-    buildInputs = [
-      # Java
-      temurin-bin-8
-
-      # LWJGL 2
-      xorg.libX11
-      xorg.libXext
-      xorg.libXcursor
-      xorg.libXrandr
-      xorg.libXxf86vm
-      libGL
-    ];
-    shellHook = ''
-      export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${xorg.libX11}/lib
-      export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${xorg.libXext}/lib
-      export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${xorg.libXcursor}/lib
-      export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${xorg.libXrandr}/lib
-      export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${xorg.libXxf86vm}/lib
-      export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${libGL}/lib
+  openal64 = { pkgs, ...}:
+  let
+    stdenv = pkgs.stdenv;
+    openal = pkgs.openal;
+  in stdenv.mkDerivation rec {
+    pname = "openal64";
+    version = openal.version;
+    dontUnpack = true;
+    buildInputs = [ openal ];
+    installPhase = ''
+      runHook preInstall
+      mkdir -p $out/lib
+      ln -s ${openal}/lib/libopenal.so $out/lib/libopenal64.so
+      runHook postInstall
     '';
-  }
+  };
+  runtimeLibs = with pkgs; (
+    [
+      temurin-bin-8
+    ]
+    ++ (with xorg; [
+      libX11
+      libXext
+      libXcursor
+      libXrandr
+      libXxf86vm
+      libXrender
+      libXi
+      libXtst
+    ])
+    ++ [
+      # lwjgl
+      libpulseaudio
+      libGL
+      openal
+      (callPackage openal64 { inherit pkgs; })
+      glfw
+      stdenv.cc.cc.lib
+
+      # oshi
+      udev
+    ]
+  );
+  runtimePrograms = with pkgs; [
+    xorg.xrandr
+    mesa-demos # need glxinfo
+  ];
+in
+pkgs.mkShell rec {
+  name = "minecraft-1.7.10-dev";
+  buildInputs = runtimeLibs ++ runtimePrograms;
+  shellHook = ''
+    export LD_LIBRARY_PATH=/run/opengl-driver/lib:${lib.makeLibraryPath runtimeLibs}:$LD_LIBRARY_PATH
+    export PATH=$PATH:${lib.makeBinPath runtimePrograms}
+  '';
+  XDG_DATA_DIRS = builtins.getEnv "XDG_DATA_DIRS";
+  XDG_RUNTIME_DIR = builtins.getEnv "XDG_RUNTIME_DIR";
+}
