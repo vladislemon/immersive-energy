@@ -10,6 +10,7 @@ public class CommonProxy {
     }
 
     public void init(FMLInitializationEvent ignoredEvent) {
+        Content.init();
     }
 
     public void postInit(FMLPostInitializationEvent ignoredEvent) {
